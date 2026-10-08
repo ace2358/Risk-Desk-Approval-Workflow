@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17634b">
+  <title>Risk Desk | Workflow Workbench</title>
+  <link rel="icon" type="image/svg+xml" href="/static/workflow-mark.svg">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/">
+      <img src="/static/workflow-mark.svg" width="40" height="40" alt="">
+      <span><strong>Risk Desk</strong><span class="brand-subtitle">Technical Risk Assessment</span></span>
+    </a>
+    <div class="session">
+      <span id="actor-avatar" class="avatar" aria-hidden="true">--</span>
+      <label for="actor">Mock user<select id="actor" disabled><option>Loading users...</option></select></label>
+      <span class="sandbox-label" title="Local mock identities, not authentication">Sandbox</span>
+    </div>
+  </header>
+
+  <div id="notice" class="notice" role="status" hidden>
+    <span id="notice-text"></span><button id="dismiss-notice" type="button">Dismiss</button>
+  </div>
+
+  <main class="workbench">
+    <aside class="sidebar" aria-label="Assessments">
+      <div class="sidebar-heading"><h2>Assessments <span id="assessment-count">0</span></h2><button id="refresh" class="quiet-button" type="button" title="Refresh workflows and audit events">Refresh</button></div>
+      <button id="new-assessment" class="primary-button full-width" type="button" disabled>New assessment</button>
+      <label class="search-label" for="search">Search<input id="search" type="search" placeholder="Application or assessment ID"></label>
+      <label class="filter-label" for="status-filter">State<select id="status-filter"><option value="all">All states</option><option>Pending</option><option>Running</option><option>Completed</option><option>Rejected</option><option>Cancelled</option></select></label>
+      <ul id="workflow-list" class="workflow-list" aria-label="Workflow instances"></ul>
+      <p id="list-empty" class="list-empty">No assessments yet</p>
+      <footer class="sidebar-footer"><span id="connection" class="connection">Connecting...</span><a href="/docs" target="_blank" rel="noopener">API reference</a></footer>
+    </aside>
+
+    <section class="content" aria-label="Selected assessment" aria-busy="true">
+      <div id="empty-state" class="empty-state">
+        <span class="eyebrow">Technical Risk Assessment</span>
+        <h1>No assessment selected</h1>
+        <img src="/static/workflow-diagram.svg" width="480" height="130" alt="Engineer Approval, Manager Approval, and Final Approval in sequence">
+        <button id="empty-new" class="primary-button" type="button" disabled>New assessment</button>
+      </div>
+
+      <section id="assessment" hidden>
+        <header class="assessment-header">
+          <div><span id="assessment-id" class="eyebrow"></span><h1 id="application-id"></h1><span id="workflow-status" class="badge"></span></div>
+          <div class="workflow-actions"><button id="start" class="primary-button" type="button" hidden>Start workflow</button><button id="cancel" class="quiet-button danger-text" type="button" hidden>Cancel assessment</button></div>
+        </header>
+        <dl class="summary"><div><dt>Submitted</dt><dd id="created-at"></dd></div><div><dt>Submitter</dt><dd id="submitter"></dd></div><div><dt>Terminated</dt><dd id="completed-at"></dd></div></dl>
+        <div class="tabs" role="tablist" aria-label="Assessment views">
+          <button id="overview-tab" type="button" role="tab" aria-selected="true" aria-controls="overview-panel">Approvals</button>
+          <button id="audit-tab" type="button" role="tab" aria-selected="false" aria-controls="audit-panel" tabindex="-1">Audit trail <span id="event-count">0</span></button>
+        </div>
+        <section id="overview-panel" role="tabpanel" aria-labelledby="overview-tab">
+          <div class="section-heading"><h2>Approval sequence</h2><span id="progress" class="subtle"></span></div>
+          <ol id="steps" class="steps"></ol>
+          <section class="latest-event"><h2>Latest event</h2><p id="latest-event"></p><time id="latest-event-time" class="subtle"></time></section>
+        </section>
+        <section id="audit-panel" role="tabpanel" aria-labelledby="audit-tab" hidden>
+          <div class="section-heading"><h2>Audit history</h2><span class="subtle">UTC timestamps</span></div>
+          <div class="table-scroll"><table><thead><tr><th>Event</th><th>Step</th><th>Actor</th><th>Time (UTC)</th><th>Details</th></tr></thead><tbody id="events"></tbody></table></div>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="create-dialog" aria-labelledby="create-title">
+    <form id="create-form">
+      <header class="dialog-heading"><span class="eyebrow">New assessment</span><h2 id="create-title">Technical Risk Assessment</h2></header>
+      <label for="entity-id">Application ID<input id="entity-id" name="entity_id" required pattern=".*\S.*" maxlength="120" autocomplete="off" placeholder="app-123"></label>
+      <fieldset><legend>Assigned reviewers</legend><div id="reviewer-fields"></div></fieldset>
+      <p class="submitted-by">Submitter: <strong id="create-actor"></strong></p>
+      <p id="create-error" class="form-error" role="alert" hidden></p>
+      <footer class="dialog-actions"><button type="button" data-close="create-dialog" class="quiet-button">Cancel</button><button id="create-submit" class="primary-button" type="submit">Create assessment</button></footer>
+    </form>
+  </dialog>
+
+  <dialog id="reject-dialog" aria-labelledby="reject-title">
+    <form id="reject-form"><header class="dialog-heading"><span id="reject-step" class="eyebrow"></span><h2 id="reject-title">Reject assessment</h2></header><label for="reason">Rejection reason<textarea id="reason" required rows="4" maxlength="2000"></textarea></label><p id="reject-error" class="form-error" role="alert" hidden></p><footer class="dialog-actions"><button type="button" data-close="reject-dialog" class="quiet-button">Keep assessment</button><button id="reject-submit" class="danger-button" type="submit">Reject assessment</button></footer></form>
+  </dialog>
+
+  <dialog id="rework-dialog" aria-labelledby="rework-title">
+    <form id="rework-form"><header class="dialog-heading"><span id="rework-step" class="eyebrow"></span><h2 id="rework-title"></h2></header><label for="rework-target"><span id="rework-target-label"></span><select id="rework-target" required></select></label><label for="rework-reason">Reason<textarea id="rework-reason" required rows="4" maxlength="2000"></textarea></label><p id="rework-error" class="form-error" role="alert" hidden></p><footer class="dialog-actions"><button type="button" data-close="rework-dialog" class="quiet-button">Cancel</button><button id="rework-submit" class="primary-button" type="submit"></button></footer></form>
+  </dialog>
+
+  <dialog id="cancel-dialog" aria-labelledby="cancel-title">
+    <form id="cancel-form"><header class="dialog-heading"><span id="cancel-target" class="eyebrow"></span><h2 id="cancel-title">Cancel assessment?</h2></header><p id="cancel-error" class="form-error" role="alert" hidden></p><footer class="dialog-actions"><button type="button" data-close="cancel-dialog" class="quiet-button">Keep assessment</button><button id="cancel-submit" class="danger-button" type="submit">Cancel assessment</button></footer></form>
+  </dialog>
+</body>
+</html>

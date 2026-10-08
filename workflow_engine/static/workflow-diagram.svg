@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 130" fill="none">
+  <path d="M80 46H400" stroke="#b4c8bb" stroke-width="2"/>
+  <circle cx="80" cy="46" r="20" fill="#fff" stroke="#17634b" stroke-width="2"/>
+  <circle cx="240" cy="46" r="20" fill="#fff" stroke="#b4c8bb" stroke-width="2"/>
+  <circle cx="400" cy="46" r="20" fill="#fff" stroke="#b4c8bb" stroke-width="2"/>
+  <g font-family="Georgia,serif" font-size="17" text-anchor="middle" fill="#17634b"><text x="80" y="52">1</text><text x="240" y="52">2</text><text x="400" y="52">3</text></g>
+  <g font-family="Bahnschrift,Trebuchet MS,sans-serif" font-size="12" text-anchor="middle" fill="#4e6357"><text x="80" y="94">Engineer Approval</text><text x="240" y="94">Manager Approval</text><text x="400" y="94">Final Approval</text></g>
+</svg>
