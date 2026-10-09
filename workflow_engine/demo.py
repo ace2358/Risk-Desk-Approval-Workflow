@@ -1,10 +1,5 @@
-from workflow_engine.schemas import MockUser
+"""Compatibility import for the presentation-only mock-user directory."""
 
+from workflow_engine.presentation.demo import MOCK_USERS
 
-MOCK_USERS = (
-    MockUser(id="submitter", name="Jordan Lee", role="Submitter"),
-    MockUser(id="engineer", name="Sam Rivera", role="Engineer"),
-    MockUser(id="manager", name="Morgan Chen", role="Manager"),
-    MockUser(id="final", name="Alex Patel", role="Final reviewer"),
-    MockUser(id="observer", name="Taylor Quinn", role="Observer"),
-)
+__all__ = ["MOCK_USERS"]

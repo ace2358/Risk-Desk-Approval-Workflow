@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#17634b">
   <title>Risk Desk | Workflow Workbench</title>
   <link rel="icon" type="image/svg+xml" href="/static/workflow-mark.svg">
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/app.js" defer></script>
+  <link rel="stylesheet" href="/static/styles.css?v=approval-builder-1">
+  <script src="/static/app.js?v=approval-builder-1" defer></script>
 </head>
 <body>
   <header class="app-header">
@@ -70,9 +70,12 @@
 
   <dialog id="create-dialog" aria-labelledby="create-title">
     <form id="create-form">
-      <header class="dialog-heading"><span class="eyebrow">New assessment</span><h2 id="create-title">Technical Risk Assessment</h2></header>
+      <header class="dialog-heading"><span class="eyebrow">New assessment</span><h2 id="create-title">Configure workflow</h2></header>
       <label for="entity-id">Application ID<input id="entity-id" name="entity_id" required pattern=".*\S.*" maxlength="120" autocomplete="off" placeholder="app-123"></label>
-      <fieldset><legend>Assigned reviewers</legend><div id="reviewer-fields"></div></fieldset>
+      <label for="saved-definition" class="builder-field">Saved workflow<select id="saved-definition"><option value="">New workflow</option></select></label>
+      <div class="definition-heading"><label for="definition-name">Workflow name<input id="definition-name" required pattern=".*\S.*" autocomplete="off"></label><label for="definition-version">Version<input id="definition-version" type="number" min="1" step="1" required value="1"></label></div>
+      <fieldset><legend>Approval sequence</legend><ol id="reviewer-fields" class="builder-list"></ol><button id="add-approval" type="button" class="quiet-button">+ Add Approval</button></fieldset>
+      <div class="definition-save"><button id="save-definition" type="button" class="quiet-button">Save definition</button><span id="definition-saved" class="subtle" role="status"></span></div>
       <p class="submitted-by">Submitter: <strong id="create-actor"></strong></p>
       <p id="create-error" class="form-error" role="alert" hidden></p>
       <footer class="dialog-actions"><button type="button" data-close="create-dialog" class="quiet-button">Cancel</button><button id="create-submit" class="primary-button" type="submit">Create assessment</button></footer>

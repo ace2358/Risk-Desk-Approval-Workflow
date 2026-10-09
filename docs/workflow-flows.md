@@ -3,7 +3,9 @@
 [Architecture](architecture.md) | [Database design](database-design.md) |
 [Setup and runnable API example](../README.md)
 
-These flows describe [WorkflowEngine](../workflow_engine/engine.py), not an LLM plan.
+These flows describe [WorkflowService](../workflow_engine/application/service.py) invoking
+[domain rules](../workflow_engine/domain/workflow.py), not an LLM plan. The legacy
+[WorkflowEngine](../workflow_engine/engine.py) constructor delegates to the service.
 All transitions are deterministic. The current
 [Technical Risk Assessment definition](../workflow_engine/definitions.py) has three
 sequential approval steps with unconditional links.
@@ -108,32 +110,31 @@ sequenceDiagram
     participant DB as SQLite
     Reviewer->>Engine: approve_step(instance_id, step_id, user_id)
     Engine->>DB: BEGIN IMMEDIATE
-    Engine->>DB: Load instance and step
+    Engine->>DB: Load execution, steps and definition transitions
     Engine->>Engine: Validate existence, membership, Running, Active, assignee
     alt Action is invalid
         Engine->>DB: ROLLBACK
         Engine-->>Reviewer: Domain error
     else Action is allowed
-        Engine->>DB: Set Approved and insert step_approved
-        Engine->>DB: Find definition transition from step name
+        Engine->>Engine: Validate transition from loaded step name
         alt Supported transition to a Pending step
-            Engine->>DB: Activate next step and insert step_activated
+            Engine->>Engine: Approve current, activate next, emit events
             Engine->>DB: Flush state and events, COMMIT
             Engine-->>Reviewer: Running state snapshot
         else No transition and every step is Approved
-            Engine->>DB: Set Completed and completed_at, insert workflow_completed
+            Engine->>Engine: Approve final, set Completed and completed_at, emit events
             Engine->>DB: Flush state and events, COMMIT
             Engine-->>Reviewer: Completed state snapshot
         else Invalid transition or unfinished steps without a transition
-            Engine->>DB: ROLLBACK approval and events
+            Engine->>DB: ROLLBACK with no domain mutation
             Engine-->>Reviewer: InvalidTransition
         end
     end
 ```
 
 The validation order is workflow existence, step existence and membership, Running
-workflow state, Active step state, then assignee permission. Transition validation follows
-the tentative approval inside the same transaction. A transition condition other than
+workflow state, Active step state, then assignee permission. Transition validation precedes
+in-memory approval mutation inside the same transaction. A transition condition other than
 `always`, missing target, or non-Pending target rejects the entire action.
 
 Completion is not inferred merely because no transition row exists: the engine also
@@ -233,6 +234,10 @@ approval. Event timestamps are not used to order the history; event IDs are.
 | `POST /workflows/{id}/steps/{step_id}/send-back` | `send_back_step` |
 | `POST /workflows/{id}/steps/{step_id}/forward` | `forward_approval` |
 | `GET /workflow-definition` | Read configured Python specification |
+| `POST /workflow-definitions` | Save an immutable ordered builder definition |
+| `GET /workflow-definitions` | List saved builder definitions |
+| `GET /workflow-definitions/{definition_id}` | Retrieve the complete saved definition |
+| `POST /workflow-definitions/{definition_id}/workflows` | Create Pending executions from the saved sequence and defaults |
 | `POST /workflows/{id}/cancel` | `cancel_workflow` |
 | `GET /workflows/{id}/events` | `get_events` |
 
@@ -267,7 +272,7 @@ states, rollback, and concurrent approval attempts. [API tests](../tests/test_ap
 HTTP behavior and persistence. [Rework tests](../tests/test_rework.py) cover step counts
 1/2/5/10, repeated rework, invalid targets/recipients, permissions, terminal states,
 version reuse, forwarding, and a five-step combined flow with audit replay. Migration
-tests preserve legacy assignments and audit immutability. All 87 tests passed in the
+tests preserve legacy assignments and audit immutability. All 129 tests passed in the
 Docker fallback with offline pytest 7.4.4 tooling; the declared pytest 8+ range remains
 unverified. Real browser send-back, forwarding, and completion also passed.
 

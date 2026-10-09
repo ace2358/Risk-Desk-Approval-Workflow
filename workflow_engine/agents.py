@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from workflow_engine.schemas import Identifier, WorkflowState
+from workflow_engine.application.contracts import Identifier, WorkflowState
 
 
 class ToolUnavailable(Exception):

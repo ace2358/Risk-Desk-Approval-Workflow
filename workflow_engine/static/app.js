@@ -1,7 +1,7 @@
 "use strict";
 
 const byId = (id) => document.getElementById(id);
-const state = { users: [], workflows: [], definition: null, selected: null, events: [], actor: "submitter", busy: false, online: false, rejectStep: null, rework: null };
+const state = { users: [], workflows: [], definition: null, definitions: [], draft: [], draftSource: null, selected: null, events: [], actor: "submitter", busy: false, online: false, rejectStep: null, rework: null };
 const eventNames = {
   workflow_created: "Assessment submitted", workflow_started: "Workflow started",
   step_activated: "Step activated", step_approved: "Step approved", step_rejected: "Step rejected",
@@ -71,6 +71,9 @@ function setBusy(busy) {
   byId("empty-new").disabled = busy || !state.online;
   for (const id of ["create-submit", "reject-submit", "cancel-submit", "rework-submit"]) byId(id).disabled = busy;
   document.querySelectorAll("[data-close]").forEach((button) => { button.disabled = busy; });
+  for (const id of ["saved-definition", "definition-name", "definition-version", "add-approval", "save-definition", "entity-id"]) byId(id).disabled = busy;
+  byId("reviewer-fields").querySelectorAll("input, select").forEach((input) => { input.disabled = busy; });
+  byId("reviewer-fields").querySelectorAll("button").forEach((button) => { button.disabled = busy || button.dataset.unavailable === "true"; });
   renderList();
   if (state.selected) renderAssessment();
 }
@@ -216,10 +219,11 @@ async function selectWorkflow(id) {
 }
 
 async function loadDashboard(preferredId) {
-  const [users, workflows, definition] = await Promise.all([api("/demo/users"), api("/workflows"), api("/workflow-definition")]);
+  const [users, workflows, definition, definitions] = await Promise.all([api("/demo/users"), api("/workflows"), api("/workflow-definition"), api("/workflow-definitions")]);
   state.users = users;
   state.workflows = workflows;
   state.definition = definition;
+  state.definitions = definitions;
   state.online = true;
   if (!users.some((user) => user.id === state.actor)) state.actor = users[0]?.id || "";
   byId("actor").replaceChildren(...users.map((user) => {
@@ -280,28 +284,122 @@ async function mutate(path, body, message, dialogId) {
 function openCreate() {
   if (!state.online || state.busy) return;
   byId("entity-id").value = `app-${String(state.workflows.length + 1).padStart(3, "0")}`;
-  byId("create-title").textContent = state.definition.name;
-  byId("reviewer-fields").replaceChildren(...state.definition.steps.map((step, index) => {
-    const label = element("label", null, step.name);
-    const select = element("select");
-    select.id = `reviewer-${index}`;
-    select.dataset.stepName = step.name;
-    select.required = true;
-    label.htmlFor = select.id;
-    select.replaceChildren(...state.users.map((user) => {
+  byId("definition-name").value = `Workflow ${byId("entity-id").value}`;
+  byId("definition-version").value = 1;
+  state.draftSource = null;
+  state.draft = state.definition.steps.map((step) => {
+    const role = step.name.toLowerCase().replace(/ approval$/, "");
+    const defaultUser = state.users.find((user) => user.role.toLowerCase().startsWith(role));
+    return { id: crypto.randomUUID(), name: step.name, assigned_to: defaultUser?.id || state.users[0].id };
+  });
+  renderSavedDefinitions();
+  renderBuilder();
+  byId("definition-saved").textContent = "";
+  byId("create-error").hidden = true;
+  renderActor();
+  byId("create-dialog").showModal();
+}
+
+function renderSavedDefinitions(selected = "") {
+  const fresh = element("option", null, "New workflow");
+  fresh.value = "";
+  byId("saved-definition").replaceChildren(fresh, ...state.definitions.map((definition) => {
+    const option = element("option", null, `${definition.name} / v${definition.version} / ${definition.steps.length} approvals`);
+    option.value = definition.id;
+    return option;
+  }));
+  byId("saved-definition").value = selected;
+}
+
+function markDraftChanged() {
+  byId("definition-saved").textContent = "";
+  if (state.draftSource && Number(byId("definition-version").value) === state.draftSource.version) {
+    byId("definition-version").value = state.draftSource.version + 1;
+  }
+}
+
+function renderBuilder() {
+  byId("reviewer-fields").replaceChildren(...state.draft.map((step, index) => {
+    const row = element("li", "builder-row");
+    row.dataset.stepId = step.id;
+    const heading = element("div", "builder-row-heading");
+    heading.append(element("strong", null, `Approval ${index + 1}`));
+    const tools = element("div", "builder-tools");
+    for (const [action, symbol, label, unavailable] of [
+      ["up", "\u2191", "Move approval up", index === 0],
+      ["down", "\u2193", "Move approval down", index === state.draft.length - 1],
+      ["remove", "\u00d7", "Remove approval", state.draft.length === 1],
+    ]) {
+      const button = element("button", "quiet-button", symbol);
+      button.type = "button";
+      button.title = label;
+      button.setAttribute("aria-label", `${label} ${index + 1}`);
+      button.dataset.unavailable = String(unavailable);
+      button.disabled = unavailable || state.busy;
+      button.addEventListener("click", () => {
+        if (state.busy) return;
+        if (action === "remove") state.draft.splice(index, 1);
+        else {
+          const destination = index + (action === "up" ? -1 : 1);
+          [state.draft[index], state.draft[destination]] = [state.draft[destination], state.draft[index]];
+        }
+        markDraftChanged();
+        renderBuilder();
+      });
+      tools.append(button);
+    }
+    heading.append(tools);
+    const fields = element("div", "builder-inputs");
+    const nameLabel = element("label", null, "Step name");
+    const name = element("input");
+    name.required = true;
+    name.pattern = ".*\\S.*";
+    name.value = step.name;
+    name.id = `approval-name-${index}`;
+    nameLabel.htmlFor = name.id;
+    name.addEventListener("input", () => { step.name = name.value; markDraftChanged(); });
+    nameLabel.append(name);
+    const approverLabel = element("label", null, "Approver");
+    const approver = element("select");
+    approver.required = true;
+    approver.id = `reviewer-${index}`;
+    approverLabel.htmlFor = approver.id;
+    approver.replaceChildren(...state.users.map((user) => {
       const option = element("option", null, `${user.name} / ${user.role}`);
       option.value = user.id;
       return option;
     }));
-    const role = step.name.toLowerCase().replace(/ approval$/, "");
-    const defaultUser = state.users.find((user) => user.role.toLowerCase().startsWith(role));
-    select.value = defaultUser?.id || state.users[0].id;
-    label.append(select);
-    return label;
+    approver.value = step.assigned_to;
+    approver.addEventListener("change", () => { step.assigned_to = approver.value; markDraftChanged(); });
+    approverLabel.append(approver);
+    fields.append(nameLabel, approverLabel);
+    row.append(heading, fields);
+    return row;
   }));
+}
+
+async function saveBuilderDefinition() {
+  if (state.busy || !state.online) return null;
+  const inputs = [byId("definition-name"), byId("definition-version"), ...byId("reviewer-fields").querySelectorAll("input, select")];
+  for (const input of inputs) if (!input.reportValidity()) return null;
+  const payload = {
+    name: byId("definition-name").value.trim(), version: Number(byId("definition-version").value),
+    steps: state.draft.map((step, index) => ({ ...step, name: step.name.trim(), order: index + 1 })),
+  };
+  setBusy(true);
   byId("create-error").hidden = true;
-  renderActor();
-  byId("create-dialog").showModal();
+  try {
+    const saved = await api("/workflow-definitions", payload);
+    state.definitions = [saved, ...state.definitions.filter((definition) => definition.id !== saved.id)];
+    state.draftSource = saved;
+    renderSavedDefinitions(String(saved.id));
+    byId("definition-saved").textContent = `Saved / v${saved.version}`;
+    return saved;
+  } catch (error) {
+    byId("create-error").textContent = error.message;
+    byId("create-error").hidden = false;
+    return null;
+  } finally { setBusy(false); }
 }
 
 function openRework(mode, step) {
@@ -347,12 +445,33 @@ byId("cancel").addEventListener("click", () => {
   byId("cancel-error").hidden = true;
   byId("cancel-dialog").showModal();
 });
-byId("create-form").addEventListener("submit", (event) => {
+byId("create-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  mutate("/workflows", {
+  const saved = await saveBuilderDefinition();
+  if (!saved) return;
+  mutate(`/workflow-definitions/${saved.id}/workflows`, {
     entity_type: "application", entity_id: byId("entity-id").value.trim(), user_id: state.actor,
-    assignments: Object.fromEntries(Array.from(byId("reviewer-fields").querySelectorAll("select"), (select) => [select.dataset.stepName, select.value])),
   }, "Assessment created", "create-dialog");
+});
+byId("add-approval").addEventListener("click", () => {
+  if (state.busy) return;
+  state.draft.push({ id: crypto.randomUUID(), name: "", assigned_to: state.users[0].id });
+  markDraftChanged();
+  renderBuilder();
+  byId("reviewer-fields").lastElementChild.querySelector("input").focus();
+});
+byId("save-definition").addEventListener("click", saveBuilderDefinition);
+byId("definition-name").addEventListener("input", markDraftChanged);
+byId("saved-definition").addEventListener("change", () => {
+  const saved = state.definitions.find((definition) => definition.id === Number(byId("saved-definition").value));
+  if (!saved) { openCreate(); return; }
+  state.draftSource = saved;
+  state.draft = saved.steps.map(({ id, name, assigned_to }) => ({ id, name, assigned_to }));
+  byId("definition-name").value = saved.name;
+  byId("definition-version").value = saved.version;
+  byId("definition-saved").textContent = `Saved / v${saved.version}`;
+  byId("create-error").hidden = true;
+  renderBuilder();
 });
 byId("reject-form").addEventListener("submit", (event) => {
   event.preventDefault();

@@ -1,8 +1,9 @@
 # Project Conventions
 
 - Keep this Python 3.12+ prototype small, readable, and incremental.
-- Keep state transitions, permissions, and audit events inside WorkflowEngine.
-- Commit state and audit events in the same transaction.
+- Keep transitions, permissions, and audit intents in domain WorkflowExecution; orchestrate use cases in WorkflowService.
+- Keep domain/application independent of FastAPI and SQLAlchemy; wire adapters in bootstrap.py.
+- Commit state and audit events in the same infrastructure unit-of-work transaction.
 - Keep FastAPI routes thin and use Pydantic request/response models.
 - Define workflows in Python and increment their version when changing steps.
 - Agents receive explicit tools, never database sessions or arbitrary SQL access.
