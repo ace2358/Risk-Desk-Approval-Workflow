@@ -14,6 +14,7 @@ Read these guides in order for the system design and its current behavior:
 | [Database design](docs/database-design.md) | ER diagram, all five tables, field types, constraints, indexes, and audit protection |
 | [Workflow flows](docs/workflow-flows.md) | State diagrams, approval sequence, rejection/cancellation, permissions, and audit events |
 | [Refactor record](docs/refactor.md) | Final layout, compatibility decisions, changed files, and verification |
+| [Approval builder](docs/approval-builder.md) | Dynamic list, saved definitions, API bodies, migration, and verification |
 
 The guides describe implemented sequential approval, send-back, and forwarding behavior.
 Local setup and runnable examples remain below.
@@ -127,7 +128,7 @@ with nine committed audit events, and isolated FastAPI/SQLite smoke checks for c
 starting, approval, completion, rejection, cancellation, permissions, invalid states, audit
 events, static assets, and browsing. The native launch task still lacks `uvicorn`, and
 the native test command remains blocked by missing dependencies. The complete suite now
-passes: **104 tests** after the architectural refactor (87 passed before it) in an isolated
+passes: **129 tests** after the approval builder (104 passed before it) in an isolated
 container with offline pytest 7.4.4 tooling and the
 fallback runtime libraries. This compatibility run does not verify the declared pytest
 8+ dependency range. One upstream FastAPI TestClient/HTTPX deprecation warning remains.
@@ -184,7 +185,37 @@ Definitions accept one or more approval steps, not a fixed three. Configure them
 with `WorkflowDefinition`; pass the definition to `WorkflowEngine` or
 `create_app(definition=...)`. Increment its version when changing steps. Reusing an existing
 name/version with changed steps or transitions is rejected. The bundled default remains
-Technical Risk Assessment version 1; no designer or definition-write API was added.
+Technical Risk Assessment version 1. The dynamic list builder and saved-definition API
+are described below; no visual graph or drag-and-drop designer was added.
+
+## Dynamic Approval Builder
+
+Open **New assessment** to configure a workflow. Each approval has a step name and mock-user
+assignee. **Add Approval** appends a row; arrow buttons reorder it; the remove button deletes
+a row. At least one row must remain. There is no application-imposed maximum count.
+
+Enter a workflow name and version, then **Save definition** to persist the ordered list
+without creating an assessment. **Create assessment** saves/reuses the definition and
+creates a Pending instance; the existing **Start workflow** action activates its first
+step. **Saved workflow** loads a saved version for reuse or revision. Editing its rows
+automatically advances the draft version; saved versions never change running instances.
+
+Each saved approval has a stable string `id`, trimmed `name`, one-based contiguous `order`,
+and eligible `assigned_to`. IDs and names must be unique within the definition. Execution
+step IDs remain separate database IDs returned in the workflow snapshot. Reordering keeps
+definition IDs; removing a row removes only that unsaved configuration row.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /workflow-definitions` | Save an immutable ordered definition version |
+| `GET /workflow-definitions` | List saved builder definitions |
+| `GET /workflow-definitions/{definition_id}` | Retrieve the complete ordered collection |
+| `POST /workflow-definitions/{definition_id}/workflows` | Create an instance from saved assignees and sequence |
+
+Legacy `POST /workflows` and `GET /workflow-definition` retain their contracts for the
+configured Python definition. [Builder documentation](docs/approval-builder.md) includes
+request examples and migration details. The current UI assigns individual mock users;
+display roles do not resolve assignees or grant permissions.
 
 Only the current active assignee can send a step back or forward it. Send-back requires
 an approved earlier step reachable through this instance's stored sequential definition.
@@ -233,12 +264,12 @@ Application submitted -> Engineer Approval -> Manager Approval -> Final Approval
 Submission creates a **Pending** workflow with three **Pending** approval steps.
 Starting it sets the workflow to **Running** and activates only Engineer Approval.
 The application itself lives outside this engine; `entity_type` and `entity_id` are references,
-not an application database. Definitions describe sequential approval steps in Python;
-their name/version and unconditional transitions are persisted when first used.
+not an application database. Definitions describe sequential approval steps in Python or
+the saved builder collection. Their name/version and unconditional transitions are persisted.
 
 Change the definition version whenever changing its steps. Existing instances retain their
-stored steps and transitions. V0 has no definition editor or arbitrary graph configuration.
-A later JSON loader can produce the same Pydantic definition specification.
+stored steps and transitions. The builder supports an ordered approval list, not arbitrary
+graphs, parallel approvals, role routing, or editing an active instance.
 
 ## Permissions And States
 

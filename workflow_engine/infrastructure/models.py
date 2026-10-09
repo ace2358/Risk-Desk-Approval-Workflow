@@ -18,6 +18,7 @@ class WorkflowDefinition(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String)
     version: Mapped[int]
+    approval_steps: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
 
 
 class WorkflowInstance(Base):

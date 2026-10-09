@@ -25,6 +25,7 @@ erDiagram
         integer id PK
         string name
         integer version
+        json approval_steps "nullable"
     }
     workflow_instances {
         integer id PK
@@ -74,17 +75,21 @@ JSON as serialized text; it has no native enum or timezone-aware datetime type.
 
 ### workflow_definitions
 
-One reusable workflow identity per name/version. Its Python specification supplies steps
-when an instance is created; this table is not a complete serialized definition.
+One reusable workflow identity per name/version. Python-defined legacy rows retain a NULL
+approval collection; builder-defined rows store the complete ordered configuration.
 
 | Field | Type | Nullable | Meaning |
 | --- | --- | --- | --- |
 | `id` | Integer, primary key | No | Generated definition ID |
 | `name` | String | No | For example, Technical Risk Assessment |
 | `version` | Integer | No | Definition version, initially 1 |
+| `approval_steps` | JSON collection | Yes | Builder steps with stable ID, name, explicit order, and assigned user; NULL for Python definitions |
 
 `UNIQUE(name, version)` prevents duplicate identities. Positive versions are validated
 in the Python specification, not by a database check constraint.
+Builder versions validate unique IDs/names, nonblank fields, eligible users and contiguous
+1..N order before persistence. They are immutable through the API; modifications create
+a new version. JSON is an extensible ordered collection, not fixed per-approval columns.
 
 ### workflow_instances
 
@@ -225,12 +230,18 @@ The model declares nonunique indexes on `workflow_steps.workflow_instance_id` an
 step names/positions, and transition sources. This is sufficient for a small prototype;
 no extra speculative indexes are added.
 
-Startup uses `Base.metadata.create_all()`, one explicit additive migration, and idempotent
+Startup uses `Base.metadata.create_all()`, explicit additive migrations, and idempotent
 trigger creation. Under `BEGIN IMMEDIATE`, a legacy steps table receives the NOT NULL
 `original_assigned_to` column and is backfilled from `assigned_to`. Repeated initialization
 does not overwrite it after forwarding. Existing instances/events and enum constraints
 remain unchanged; no `SentBack` state or history table rebuild is needed. There is no
 general migration framework; other incompatible schema changes still need explicit design.
+
+The builder adds nullable `workflow_definitions.approval_steps JSON` if missing. Legacy
+rows remain NULL, no values are inferred from mutable assignments, and every old column
+is preserved. A live SQLite backup and before/after row comparison verified the migration;
+see [builder verification](approval-builder.md). This is the first schema addition after
+the architectural refactor; the refactor itself required no migration.
 
 Increment definition versions when changing workflow steps, preserve stored transitions
 used by existing instances, and never edit workflow state manually as a substitute for an

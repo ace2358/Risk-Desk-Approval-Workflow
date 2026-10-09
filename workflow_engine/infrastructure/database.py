@@ -20,6 +20,9 @@ def initialize_database(engine: Engine) -> None:
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
         connection.exec_driver_sql("BEGIN IMMEDIATE")
+        definition_columns = {column["name"] for column in inspect(connection).get_columns("workflow_definitions")}
+        if "approval_steps" not in definition_columns:
+            connection.exec_driver_sql("ALTER TABLE workflow_definitions ADD COLUMN approval_steps JSON")
         columns = {column["name"] for column in inspect(connection).get_columns("workflow_steps")}
         if "original_assigned_to" not in columns:
             connection.exec_driver_sql(

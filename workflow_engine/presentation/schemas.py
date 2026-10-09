@@ -11,6 +11,11 @@ class ActorRequest(RequestModel):
     user_id: Identifier
 
 
+class CreateFromDefinitionRequest(ActorRequest):
+    entity_type: Identifier
+    entity_id: Identifier
+
+
 class CreateWorkflowRequest(ActorRequest):
     entity_type: Identifier
     entity_id: Identifier

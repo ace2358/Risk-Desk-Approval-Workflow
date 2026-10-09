@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from workflow_engine.application.contracts import CreateWorkflowCommand
 from workflow_engine.domain.definitions import WorkflowDefinition as DefinitionSpec
-from workflow_engine.domain.types import NotFound, StepStatus, WorkflowStatus
+from workflow_engine.domain.definitions import ApprovalWorkflowDefinition, SavedApprovalDefinition
+from workflow_engine.domain.types import InvalidInput, NotFound, StepStatus, WorkflowStatus
 from workflow_engine.domain.workflow import (
     ApprovalAssignment, StepExecution, Transition, WorkflowEvent as DomainEvent, WorkflowExecution,
 )
@@ -16,6 +17,34 @@ class SQLAlchemyWorkflowRepository:
     def __init__(self, session: Session):
         self.session = session
         self._saved_events: dict[int, tuple[WorkflowExecution, int]] = {}
+
+    def save_definition(self, definition: ApprovalWorkflowDefinition) -> SavedApprovalDefinition:
+        existing = self.session.scalar(select(WorkflowDefinition).where(
+            WorkflowDefinition.name == definition.name, WorkflowDefinition.version == definition.version,
+        ))
+        steps = [step.model_dump(mode="json") for step in definition.steps]
+        if existing is not None:
+            if existing.approval_steps != steps:
+                raise InvalidInput("Definition version already exists; increment the workflow version")
+            return self.get_definition(existing.id)
+        stored = self._definition(definition.execution_definition())
+        stored.approval_steps = steps
+        self.session.flush()
+        return SavedApprovalDefinition(id=stored.id, **definition.model_dump())
+
+    def get_definition(self, definition_id: int) -> SavedApprovalDefinition:
+        definition = self.session.get(WorkflowDefinition, definition_id)
+        if definition is None or definition.approval_steps is None:
+            raise NotFound("Saved approval definition does not exist")
+        return SavedApprovalDefinition(
+            id=definition.id, name=definition.name, version=definition.version, steps=definition.approval_steps,
+        )
+
+    def list_definitions(self) -> list[SavedApprovalDefinition]:
+        return [self.get_definition(definition.id) for definition in self.session.scalars(
+            select(WorkflowDefinition).where(WorkflowDefinition.approval_steps.is_not(None))
+            .order_by(WorkflowDefinition.id.desc()),
+        )]
 
     def _steps(self, instance_id: int) -> list[WorkflowStep]:
         return list(self.session.scalars(select(WorkflowStep).where(
@@ -47,6 +76,8 @@ class SQLAlchemyWorkflowRepository:
                 WorkflowInstance.workflow_definition_id == definition.id,
             ).order_by(WorkflowInstance.id))
             stored_steps = [(step.name, step.step_type) for step in self._steps(sample.id)] if sample else None
+            if definition.approval_steps is not None:
+                stored_steps = [(step["name"], "approval") for step in definition.approval_steps]
             spec.require_same_version(stored_transitions, stored_steps)
         return definition
 

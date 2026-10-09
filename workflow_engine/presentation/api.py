@@ -5,11 +5,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from workflow_engine.application.service import WorkflowService
-from workflow_engine.domain.definitions import WorkflowDefinition
+from workflow_engine.domain.definitions import ApprovalWorkflowDefinition, SavedApprovalDefinition, WorkflowDefinition
 from workflow_engine.domain.types import InvalidInput, InvalidTransition, NotFound, PermissionDenied, WorkflowError
 from workflow_engine.presentation.demo import MOCK_USERS
 from workflow_engine.presentation.schemas import (
-    ActorRequest, CreateWorkflowRequest, EventState, ForwardApprovalRequest, MockUser,
+    ActorRequest, CreateFromDefinitionRequest, CreateWorkflowRequest, EventState, ForwardApprovalRequest, MockUser,
     RejectionRequest, SendBackRequest, WorkflowState,
 )
 
@@ -39,6 +39,22 @@ def create_http_app(definition: WorkflowDefinition, lifespan) -> FastAPI:
     @app.get("/workflow-definition", response_model=WorkflowDefinition)
     def get_workflow_definition():
         return definition
+
+    @app.post("/workflow-definitions", response_model=SavedApprovalDefinition, status_code=201)
+    def save_definition(body: ApprovalWorkflowDefinition, request: Request):
+        return service(request).save_definition(body)
+
+    @app.get("/workflow-definitions", response_model=list[SavedApprovalDefinition])
+    def list_definitions(request: Request):
+        return service(request).list_definitions()
+
+    @app.get("/workflow-definitions/{definition_id}", response_model=SavedApprovalDefinition)
+    def get_definition(definition_id: int, request: Request):
+        return service(request).get_definition(definition_id)
+
+    @app.post("/workflow-definitions/{definition_id}/workflows", response_model=WorkflowState, status_code=201)
+    def create_from_definition(definition_id: int, body: CreateFromDefinitionRequest, request: Request):
+        return service(request).create_from_definition(definition_id, **body.model_dump())
 
     @app.get("/workflows", response_model=list[WorkflowState])
     def list_workflows(request: Request):

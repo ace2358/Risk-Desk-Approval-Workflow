@@ -124,7 +124,7 @@ There are two classes named `WorkflowDefinition`, with different responsibilitie
 
 - The Pydantic class in [domain/definitions.py](../workflow_engine/domain/definitions.py) holds the
   frozen Python specification, including its ordered steps.
-- The ORM class in [infrastructure/models.py](../workflow_engine/infrastructure/models.py) stores only ID, name, and version.
+- The ORM class in [infrastructure/models.py](../workflow_engine/infrastructure/models.py) stores ID, name, version, and optional builder approval JSON.
 
 When creating an instance, the repository finds or inserts the definition by `(name, version)`.
 On first use it persists adjacent-step transitions. Every new instance receives its own
@@ -135,6 +135,14 @@ The API defaults to Technical Risk Assessment version 1. Engine construction and
 `create_app(definition=...)` can supply another sequential approval specification with
 one or more steps. `GET /workflow-definition` exposes the configured specification
 read-only; the workbench generates assignments from it.
+
+The builder's ApprovalWorkflowDefinition adds stable approval IDs, explicit order and
+default assignees. WorkflowService saves/retrieves immutable versions through repository
+ports and creates instances from them using the existing execution specification. The
+configured Python definition seeds the draft only; it does not cap the approval count.
+Presentation exposes `/workflow-definitions` list/save/read and instance creation routes.
+The repository persists the full ordered collection; existing domain execution and audit
+rules are unchanged. See [builder design and API](approval-builder.md).
 
 Increment the version when changing steps. Reusing a version with different Python steps
 is rejected by comparing persisted transitions and instance steps. Existing instances keep their stored
@@ -209,7 +217,7 @@ Source files passed syntax compilation during initial setup, but native dependen
 installation prevented pytest and server startup verification. A temporary Docker runtime
 with preinstalled libraries now runs the real app; browser approval and isolated API/SQLite
 smoke checks passed. The pre-refactor suite passed 87 tests; the post-refactor suite passed
-104 tests in an isolated container with offline
+104 tests after refactoring, and 129 tests after the builder in an isolated container with offline
 pytest 7.4.4 tooling; the declared pytest 8+ range remains unverified. See the
 [current container setup](../README.md) for the networking workaround and restart commands.
 Architecture tests enforce inward imports and check domain/application/agent-tool imports

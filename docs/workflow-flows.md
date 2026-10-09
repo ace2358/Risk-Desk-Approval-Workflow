@@ -234,6 +234,10 @@ approval. Event timestamps are not used to order the history; event IDs are.
 | `POST /workflows/{id}/steps/{step_id}/send-back` | `send_back_step` |
 | `POST /workflows/{id}/steps/{step_id}/forward` | `forward_approval` |
 | `GET /workflow-definition` | Read configured Python specification |
+| `POST /workflow-definitions` | Save an immutable ordered builder definition |
+| `GET /workflow-definitions` | List saved builder definitions |
+| `GET /workflow-definitions/{definition_id}` | Retrieve the complete saved definition |
+| `POST /workflow-definitions/{definition_id}/workflows` | Create Pending executions from the saved sequence and defaults |
 | `POST /workflows/{id}/cancel` | `cancel_workflow` |
 | `GET /workflows/{id}/events` | `get_events` |
 
@@ -268,7 +272,7 @@ states, rollback, and concurrent approval attempts. [API tests](../tests/test_ap
 HTTP behavior and persistence. [Rework tests](../tests/test_rework.py) cover step counts
 1/2/5/10, repeated rework, invalid targets/recipients, permissions, terminal states,
 version reuse, forwarding, and a five-step combined flow with audit replay. Migration
-tests preserve legacy assignments and audit immutability. All 104 tests passed in the
+tests preserve legacy assignments and audit immutability. All 129 tests passed in the
 Docker fallback with offline pytest 7.4.4 tooling; the declared pytest 8+ range remains
 unverified. Real browser send-back, forwarding, and completion also passed.
 

@@ -2,7 +2,9 @@ from collections.abc import Callable
 
 from workflow_engine.application.contracts import CreateWorkflowCommand, EventState, WorkflowState
 from workflow_engine.application.ports import UnitOfWorkFactory
-from workflow_engine.domain.definitions import WorkflowDefinition, technical_risk_workflow
+from workflow_engine.domain.definitions import (
+    ApprovalWorkflowDefinition, SavedApprovalDefinition, WorkflowDefinition, technical_risk_workflow,
+)
 from workflow_engine.domain.types import InvalidInput
 from workflow_engine.domain.workflow import WorkflowExecution, require_reason
 
@@ -15,6 +17,34 @@ class WorkflowService:
         self.unit_of_work = unit_of_work
         self.definition = definition
         self.recipient_is_eligible = recipient_is_eligible
+
+    def save_definition(self, definition: ApprovalWorkflowDefinition) -> SavedApprovalDefinition:
+        for step in definition.steps:
+            if self.recipient_is_eligible is None or not self.recipient_is_eligible(step.assigned_to):
+                raise InvalidInput(f"Approver is not eligible: {step.assigned_to}")
+        with self.unit_of_work(True) as transaction:
+            return transaction.workflows.save_definition(definition)
+
+    def list_definitions(self) -> list[SavedApprovalDefinition]:
+        with self.unit_of_work(False) as transaction:
+            return transaction.workflows.list_definitions()
+
+    def get_definition(self, definition_id: int) -> SavedApprovalDefinition:
+        with self.unit_of_work(False) as transaction:
+            return transaction.workflows.get_definition(definition_id)
+
+    def create_from_definition(self, definition_id: int, entity_type: str, entity_id: str,
+                               user_id: str) -> WorkflowState:
+        with self.unit_of_work(True) as transaction:
+            definition = transaction.workflows.get_definition(definition_id)
+            command = CreateWorkflowCommand(
+                entity_type=entity_type, entity_id=entity_id, user_id=user_id,
+                assignments={step.name: step.assigned_to for step in definition.steps},
+            )
+            workflow = transaction.workflows.create(definition.execution_definition(), command)
+            workflow.record_creation()
+            transaction.workflows.save(workflow)
+            return WorkflowState.model_validate(workflow)
 
     def create_workflow(self, entity_type: str, entity_id: str, assignments: dict[str, str], user_id: str) -> WorkflowState:
         command = CreateWorkflowCommand(
