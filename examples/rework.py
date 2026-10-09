@@ -1,10 +1,11 @@
 from tempfile import TemporaryDirectory
 from pathlib import Path
 
-from workflow_engine.database import create_database, initialize_database, session_factory
-from workflow_engine.definitions import StepDefinition, WorkflowDefinition
-from workflow_engine.engine import WorkflowEngine
-from workflow_engine.models import StepStatus, WorkflowStatus
+from workflow_engine.application.service import WorkflowService
+from workflow_engine.domain.definitions import StepDefinition, WorkflowDefinition
+from workflow_engine.domain.types import StepStatus, WorkflowStatus
+from workflow_engine.infrastructure.database import create_database, initialize_database, session_factory
+from workflow_engine.infrastructure.repository import SQLAlchemyUnitOfWork
 
 
 def main():
@@ -20,7 +21,10 @@ def main():
         sessions = session_factory(database)
         try:
             initialize_database(database)
-            engine = WorkflowEngine(sessions, definition, recipient_is_eligible=users.__contains__)
+            engine = WorkflowService(
+                lambda write: SQLAlchemyUnitOfWork(sessions, write), definition,
+                recipient_is_eligible=users.__contains__,
+            )
             state = engine.create_workflow("application", "example-5-step", dict(zip(
                 (step.name for step in definition.steps),
                 ("engineer", "john", "quality", "safety", "final"),

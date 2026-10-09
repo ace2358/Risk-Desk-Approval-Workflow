@@ -3,11 +3,11 @@
 [Architecture](architecture.md) | [Workflow flows](workflow-flows.md) |
 [Project overview and setup](../README.md)
 
-The schema is defined in [models.py](../workflow_engine/models.py) and initialized by
-[database.py](../workflow_engine/database.py). SQLite stores workflow state and history;
+The schema is defined in [infrastructure/models.py](../workflow_engine/infrastructure/models.py) and initialized by
+[infrastructure/database.py](../workflow_engine/infrastructure/database.py). SQLite stores workflow state and history;
 it does not store application details, users, roles, or agent conversations.
 
-The local UI's mock users are fixed Python data in [demo.py](../workflow_engine/demo.py).
+The local UI's mock users are fixed Python data in [presentation/demo.py](../workflow_engine/presentation/demo.py).
 Their IDs are stored only as existing `assigned_to` and `actor_id` strings when used in
 workflows. There is no users table, user foreign key, or authentication schema.
 
@@ -211,6 +211,12 @@ replace the database file. No delete cascades, retention job, or history-pruning
 State and event inserts commit in one engine transaction. Invalid actions leave no
 committed state change or new event. Failed-action auditing would require a separate,
 explicit design and is not implemented.
+
+The architectural refactor made no schema changes and needs no new migration. The
+repository maps domain execution/assignment objects to these same columns. The unit of
+work owns SQLite transaction mechanics; the service owns operation scope. The existing
+original-assignee migration and audit triggers are unchanged. Live data and schema hashes
+matched before/after refactored startup: 7 instances and 56 audit events.
 
 ## Indexes And Operations
 

@@ -13,6 +13,7 @@ Read these guides in order for the system design and its current behavior:
 | [Architecture](docs/architecture.md) | Components, dependency boundaries, transactions, startup, and future agent tools |
 | [Database design](docs/database-design.md) | ER diagram, all five tables, field types, constraints, indexes, and audit protection |
 | [Workflow flows](docs/workflow-flows.md) | State diagrams, approval sequence, rejection/cancellation, permissions, and audit events |
+| [Refactor record](docs/refactor.md) | Final layout, compatibility decisions, changed files, and verification |
 
 The guides describe implemented sequential approval, send-back, and forwarding behavior.
 Local setup and runnable examples remain below.
@@ -20,26 +21,32 @@ Local setup and runnable examples remain below.
 ## Architecture
 
 ```text
-FastAPI requests -> WorkflowEngine -> SQLAlchemy -> SQLite
-                         |
-                  state snapshots
-                         |
-                  WorkflowTools <- WorkflowAgent (abstract, not enabled)
-                         |
-                  external reader callbacks (optional)
+FastAPI -> WorkflowService -> WorkflowExecution (domain rules)
+            |
+        repository / unit-of-work ports
+            ^
+        SQLAlchemy adapter -> SQLite
+
+WorkflowTools -> injected application readers
+bootstrap.py wires concrete adapters at startup
 ```
 
-- [models.py](workflow_engine/models.py): the five persistence models and state enums.
-- [database.py](workflow_engine/database.py): SQLite setup, sessions, and audit immutability.
-- [definitions.py](workflow_engine/definitions.py): immutable Python workflow specifications.
-- [engine.py](workflow_engine/engine.py): state transitions, permissions, transactions, and events.
-- [schemas.py](workflow_engine/schemas.py): Pydantic requests and detached response snapshots.
-- [api.py](workflow_engine/api.py): thin HTTP routes and domain error mapping.
+- [domain/workflow.py](workflow_engine/domain/workflow.py): execution entities, permissions, transitions, and events.
+- [domain/definitions.py](workflow_engine/domain/definitions.py): reusable definitions and version invariants.
+- [application/service.py](workflow_engine/application/service.py): use cases through abstract persistence ports.
+- [application/contracts.py](workflow_engine/application/contracts.py): commands and detached snapshots.
+- [infrastructure/repository.py](workflow_engine/infrastructure/repository.py): ORM mapping and transactional persistence.
+- [presentation/api.py](workflow_engine/presentation/api.py): routes, static serving, and HTTP errors.
+- [bootstrap.py](workflow_engine/bootstrap.py): configuration and concrete dependency wiring.
 - [agents.py](workflow_engine/agents.py): an inactive agent contract and explicit tool boundary.
 - [tests](tests): database, engine, API, and tool-boundary behavior tests.
 
-The engine never calls an agent to decide whether a transition is permitted. API handlers
-and future tools must call engine operations rather than modifying ORM models themselves.
+The root engine, database, models, definitions, schemas, demo, and API modules remain
+compatibility facades. `WorkflowEngine(sessions, ...)` delegates to the application service;
+`workflow_engine.api:app` remains the entry point. New business code uses the owning layers.
+Domain and application have no SQLAlchemy/FastAPI dependency; existing Pydantic definition
+validation is retained. No dependencies or schema changes were added. API handlers and
+future tools call use cases rather than modifying ORM models themselves.
 
 ## Local Setup
 
@@ -120,7 +127,8 @@ with nine committed audit events, and isolated FastAPI/SQLite smoke checks for c
 starting, approval, completion, rejection, cancellation, permissions, invalid states, audit
 events, static assets, and browsing. The native launch task still lacks `uvicorn`, and
 the native test command remains blocked by missing dependencies. The complete suite now
-passes: **87 tests** in an isolated container with offline pytest 7.4.4 tooling and the
+passes: **104 tests** after the architectural refactor (87 passed before it) in an isolated
+container with offline pytest 7.4.4 tooling and the
 fallback runtime libraries. This compatibility run does not verify the declared pytest
 8+ dependency range. One upstream FastAPI TestClient/HTTPX deprecation warning remains.
 
